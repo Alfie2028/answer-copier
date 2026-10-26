@@ -17,7 +17,7 @@ from educoder_reminder.client import open_client
 from educoder_reminder.login import verify_identity
 from educoder_reminder.submit import walk_prev_to_head
 
-DEFAULT_COOKIE = 'autologin_trustie=c181d23024e3a59b8bcb15fb9adc9be7165c87d5; _educoder_session=ada28f740f9cd26a78cabe54db4c148'
+DEFAULT_COOKIE = ''  # 在 GUI 中填入整段 cookie，勿在此硬编码
 
 
 def _token_from_cookie(cookie):
@@ -75,6 +75,38 @@ async def _full_chain(client, entry):
     return ordered, cache
 
 
+async def _collect_all_tasks(page, log):
+    """点'查看全部任务'弹层，抓取大关全部小关 gid（按顺序）。"""
+    gids = []
+    try:
+        at = page.locator('a[title="查看全部任务"]')
+        if await at.count() > 0:
+            await at.first.click(timeout=6000)
+            await page.wait_for_timeout(3500)
+            links = await page.evaluate(r"""
+            () => {
+              const out = [];
+              for (const a of document.querySelectorAll('a[href^="/tasks/"]')) {
+                const t = (a.innerText || '').trim();
+                if (/^\s*\d+\./.test(t)) {
+                  const g = a.getAttribute('href').split('/').pop();
+                  if (g) out.push(g);
+                }
+              }
+              return out;
+            }""")
+            gids = links
+        try:
+            await page.keyboard.press('Escape')
+        except Exception:
+            pass
+    except Exception as e:
+        log(f'  查看全部任务弹层异常: {e}')
+    if not gids:
+        log('  弹层未拿到关卡列表，将回退 API 关卡链')
+    return gids
+
+
 async def run(urls, cookie, interval, log):
     token = _token_from_cookie(cookie)
     username = await _resolve_username(token, cookie)
@@ -91,13 +123,21 @@ async def run(urls, cookie, interval, log):
             for idx, url in enumerate(urls, 1):
                 code, hw, entry = _parse_task_url(url)
                 log(f'\n[{idx}/{len(urls)}] 大关入口: {entry}')
-                ordered, cache = await _full_chain(client, entry)
-                log(f'  关卡链 {len(ordered)} 个: {ordered}')
                 page = await ctx.new_page()
-                for i, gid in enumerate(ordered):
+                try:
+                    await page.goto(_gid_url(code, hw, entry), wait_until='domcontentloaded', timeout=60000)
+                    await page.wait_for_timeout(8000)
+                    gids = await _collect_all_tasks(page, log)
+                except Exception as e:
+                    log(f'  进入入口异常: {e}，回退 API 关卡链')
+                    gids = []
+                if not gids:
+                    ordered, _ = await _full_chain(client, entry)
+                    gids = ordered
+                log(f'  关卡链 {len(gids)} 个: {gids}')
+                for gid in gids:
                     try:
-                        gurl = _gid_url(code, hw, gid)
-                        await page.goto(gurl, wait_until='domcontentloaded', timeout=60000)
+                        await page.goto(_gid_url(code, hw, gid), wait_until='domcontentloaded', timeout=60000)
                         await page.wait_for_timeout(8000)
                         # 启动环境（如需）
                         try:
@@ -115,20 +155,10 @@ async def run(urls, cookie, interval, log):
                         await judge.first.wait_for(state='visible', timeout=90000)
                         await judge.first.click(timeout=10000)
                         log(f'  → 评测 {gid}: 已点击评测按钮')
-                        # 等间隔（平台小关评测间隔）
                         log(f'    等待 {wait}s 间隔后进入下一关…')
                         await page.wait_for_timeout(wait * 1000)
                     except Exception as e:
                         log(f'  ✗ 关 {gid} 异常: {e}（继续下一关）')
-                    # 进入下一关（URL 强制导航，保证不漏关）
-                    if i < len(ordered) - 1:
-                        nxt = ordered[i + 1]
-                        try:
-                            await page.goto(_gid_url(code, hw, nxt), wait_until='domcontentloaded', timeout=60000)
-                            await page.wait_for_timeout(2000)
-                            log(f'    已进入下一关 {nxt}')
-                        except Exception as e:
-                            log(f'  ✗ 进入 {nxt} 失败: {e}')
                 await page.close()
         await browser.close()
         log('\n全部完成。')
@@ -157,7 +187,7 @@ class ClickJudgeApp:
         ttk.Label(frm, text='大关任务链接（每行一个）').grid(row=1, column=0, sticky='w', **pad)
         self.txt_links = tk.Text(frm, height=6, width=100, wrap='none')
         self.txt_links.grid(row=1, column=1, sticky='we', **pad)
-        self.txt_links.insert('1.0', 'https://www.educoder.net/tasks/2i6ng7vp/4231205/fxe39zkc7gij')
+        self.txt_links.insert('1.0', 'https://www.educoder.net/tasks/{课程code}/{作业id}/{关卡id}')
         ttk.Label(frm, text='间隔（秒，可填0）').grid(row=2, column=0, sticky='w', **pad)
         ttk.Entry(frm, textvariable=self.var_interval, width=12).grid(row=2, column=1, sticky='w', **pad)
         ttk.Label(frm, text='遍历大关所有关卡，逐个点击评测，间隔后强制进入下一关，不关闭页面。',

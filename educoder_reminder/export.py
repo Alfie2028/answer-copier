@@ -1,8 +1,8 @@
 """把头歌课堂的已作答答案导出为 class-answers 格式（与 answers.json 一致）。
 
 用法（在本项目目录、Windows 用 venv python）：
-    .\.venv\Scripts\python.exe -m educoder_reminder.export --classroom 2i6ng7vp
-    .\.venv\Scripts\python.exe -m educoder_reminder.export --classroom HCEAP94S --output out.json
+    .\.venv\Scripts\python.exe -m educoder_reminder.export --classroom 你的课堂code
+    .\.venv\Scripts\python.exe -m educoder_reminder.export --classroom 你的课堂code --output out.json
 
 说明：
 - 选择题：从平台任务详情 choose_test_cases.test_sets[].actual_output 读取已提交答案，
@@ -120,7 +120,7 @@ async def run(classroom, output):
 
 def main():
     parser = argparse.ArgumentParser(description='导出头歌课堂答案为 class-answers 格式（只读）')
-    parser.add_argument('--classroom', required=True, help='课堂 code，如 2i6ng7vp')
+    parser.add_argument('--classroom', required=True, help='课堂 code，如 abc12345')
     parser.add_argument('--output', default=str(DEFAULT_OUT), help='输出 JSON 路径')
     args = parser.parse_args()
     try:

@@ -1,8 +1,8 @@
 # 头歌实践教学平台自动化工具（Educoder Automation Tools）
 
-针对头歌（Educoder）实践教学平台的可视化自动化工具集，用 Python + Playwright 实现，无需手动操作浏览器即可批量完成课程作业。凭账号 Cookie 鉴权，不需要密码。
+针对头歌（Educoder）实践教学平台的可视化自动化工具集，用 Python + Playwright 实现，凭账号 Cookie 鉴权，无需密码，无需手动操作浏览器即可批量完成课程作业。
 
-## 包含两个工具
+## 包含三个工具
 
 ### 1. 答案搬运器 Answer Copier（`answer_copier_gui.py`）
 
@@ -39,34 +39,87 @@
 | 大关任务链接 | `https://www.educoder.net/tasks/{课程code}/{作业id}/{关卡id}`，每行一个 |
 | 间隔（秒） | 平台小关评测间隔，默认 30 |
 
+### 3. 图文作业一键提交 / 拉取（`图文作业一键提交/`）
+
+把"答案账号"已提交的图文作业拉取到本地，本地修改后，用"目标账号"一键上传提交。
+
+**功能流程**
+1. 填答案账号 Cookie、目标账号 Cookie、课程图文作业链接、本地答案根文件夹
+2. **列出作业**：读取课程下全部图文作业（名称 + id），勾选要处理的作业
+3. **拉取答案**：用答案账号把所有已提交作业的文件下载到「根文件夹/作业名/」
+4. **一键提交**：用目标账号对每个作业上传本地文件并点击提交
+
+详见 [`图文作业一键提交/README.md`](图文作业一键提交/README.md)。
+
 ## 运行
 
-- 双击对应 `.bat`（用系统 Python，含 tkinter）
+- 双击对应 `.bat`：
+  - `answer_copier.bat` → 答案搬运器
+  - `auto_click_judge.bat` → 自动点击评测
+  - `图文作业一键提交\start_gui.bat` → 图文作业工具
 - 或命令行：`python answer_copier_gui.py` / `python auto_click_judge_gui.py`
-
-## 首次使用：迁移依赖模块
-
-两个工具都依赖 `educoder_reminder` 模块（签名、鉴权、导出、提交）。首次使用双击 **`migrate_deps.bat`**，自动把依赖模块拷贝到本目录。
 
 ## 依赖环境
 
-- Windows 本地 + Python（含 tkinter）+ `playwright` + `python-dotenv`
+- Windows 本地 + Python 3.9+（含 tkinter）+ `playwright` + `requests`
+- 浏览器内核：`python -m playwright install msedge`（或 chromium）
 - 网络可达 `educoder.net`；凭 Cookie 鉴权，无需密码
 
 ## 目录结构
 
 ```
-头歌选择快答/
+answer-copier/
 ├── answer_copier_gui.py      # 答案搬运器
 ├── answer_copier.bat
 ├── auto_click_judge_gui.py   # 自动点击评测
 ├── auto_click_judge.bat
-├── migrate_deps.bat          # 依赖迁移
 ├── README.md
-└── educoder_reminder/        # 依赖模块
+├── educoder_reminder/        # 共享依赖模块（签名、鉴权、导出、提交）
+│   ├── auth.py
+│   ├── client.py
+│   ├── errors.py
+│   ├── export.py
+│   ├── login.py
+│   ├── submit.py
+│   ├── _oslock.py
+│   └── __init__.py
+└── 图文作业一键提交/           # 图文作业一键提交 / 拉取
+    ├── common_homework.py
+    ├── common_homework_gui.py
+    ├── start_gui.bat
+    ├── .env.example
+    └── README.md
 ```
 
-## 迁移到其他机器
+## Cookie 获取与安全
 
-拷走整个目录（含 `educoder_reminder\`），目标机器装好 Python / playwright 后双击 `.bat` 即可。
-"# answer-copier" 
+浏览器登录 educoder 后，F12 → 控制台执行 `document.cookie`，复制含 `autologin_trustie=...; _educoder_session=...` 的整段字符串填入界面。
+
+- Cookie 即会话凭据，**勿外发、勿提交到公开仓库**。
+- `auto_click_judge_gui.py` 顶部保留了一个调试用的 `DEFAULT_COOKIE` 默认值，分发或上传前请将其清空为 `''`。
+- `.env.example` 仅为占位示例，不含真实 Cookie。
+
+## 快速开始（新机器 / 全新 clone）
+
+1. 安装 Python 3.9+（安装时勾选 **Add Python to PATH** 和 **py launcher**）。
+2. 安装依赖：
+   ```
+   pip install -r requirements.txt
+   ```
+3. 安装浏览器内核（脚本默认调用系统 Edge，无需下载 chromium；若需无头自动登录兜底，再执行）：
+   ```
+   python -m playwright install chromium
+   ```
+4. 双击对应 `.bat` 启动图形界面：
+   - `answer_copier.bat` → 答案搬运器
+   - `auto_click_judge.bat` → 自动点击评测
+   - `图文作业一键提交\start_gui.bat` → 图文作业工具
+
+`.bat` 会自动通过 `py -3` 或 `python` 命令定位解释器，不再硬编码本机路径，换机器直接可用。
+
+## 常见问题
+
+- **双击 `.bat` 闪退 / 提示"未找到 Python"**：Python 未加入 PATH，重装时勾选 Add to PATH，或改用 `py -3 xxx_gui.py` 手动启动。
+- **启动报 `ModuleNotFoundError: No module named 'playwright'`**：依赖装到了别的 Python 环境里，执行 `py -m pip install -r requirements.txt`。
+- **浏览器窗口起不来 / 报 Executable doesn't exist**：执行 `python -m playwright install chromium`，或确认系统已装 Edge（`channel='msedge'` 依赖系统 Edge）。
+- **拉到新机器后没有"图文作业一键提交"目录**：确认已 `git pull` 到最新，该目录已纳入版本管理。
